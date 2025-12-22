@@ -1,0 +1,16 @@
+target/
+Cargo.lock
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/
+.idea/
+*.iml
+/var/
+
+
+# WIP
+UserStories.md
+copilot*.md

@@ -1,0 +1,64 @@
+[package]
+name = "skypier-blackhole"
+version = "0.1.0"
+edition = "2021"
+authors = ["Skypier Team"]
+description = "High-performance DNS-based domain blocking tool for Skypier VPN nodes"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/skypier/skypier-blackhole"
+readme = "README.md"
+keywords = ["dns", "blocklist", "vpn", "adblock", "privacy"]
+categories = ["network-programming", "command-line-utilities"]
+
+[[bin]]
+name = "skypier-blackhole"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# DNS server
+hickory-server = "0.24"
+hickory-client = "0.24"
+hickory-proto = "0.24"
+
+# CLI
+clap = { version = "4.4", features = ["derive", "cargo"] }
+
+# Configuration
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+# HTTP client for downloading blocklists
+reqwest = { version = "0.11", features = ["json"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Data structures
+radix_trie = "0.2"
+bloomfilter = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Time handling
+chrono = "0.4"
+tokio-cron-scheduler = "0.10"
+
+# Signal handling
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+
+[dev-dependencies]
+tempfile = "3.8"
+mockito = "1.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

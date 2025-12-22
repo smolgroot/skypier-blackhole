@@ -1,0 +1,84 @@
+# Skypier Blackhole Configuration
+# Default configuration file for DNS-based domain blocking
+
+[server]
+# Listen address for DNS server (default: 127.0.0.1)
+# Use 0.0.0.0 to listen on all interfaces (Pi-hole replacement mode)
+listen_addr = "127.0.0.1"
+
+# Listen port for DNS server (default: 53)
+# Requires CAP_NET_BIND_SERVICE capability or root for ports < 1024
+listen_port = 53
+
+# Upstream DNS servers to forward non-blocked queries
+# Default: Cloudflare DNS (1.1.1.1)
+# Alternative options:
+#   - Google DNS: ["8.8.8.8:53", "8.8.4.4:53"]
+#   - Quad9: ["9.9.9.9:53"]
+#   - OpenDNS: ["208.67.222.222:53", "208.67.220.220:53"]
+upstream_dns = ["1.1.1.1:53"]
+
+# Response to return for blocked domains
+# Options: "refused", "nxdomain", or {ip = "0.0.0.0"}
+# - "refused": DNS REFUSED response (fastest, <100μs)
+# - "nxdomain": Domain doesn't exist response
+# - {ip = "0.0.0.0"}: Return specific IP address
+blocked_response = "refused"
+
+[blocklist]
+# Remote blocklist URLs (GitHub, Pi-hole lists, etc.)
+# Downloaded automatically and updated based on schedule
+# Format: One domain per line, supports # comments
+remote_lists = [
+    "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+    # Uncomment for additional lists:
+    # "https://raw.githubusercontent.com/PolishFiltersTeam/KADhosts/master/KADhosts.txt",
+    # "https://raw.githubusercontent.com/FadeMind/hosts.extras/master/add.Spam/hosts",
+]
+
+# Local blocklist files to load
+# Useful for offline installations or custom lists
+local_lists = [
+    # "/etc/skypier/local-blocklist.txt",
+]
+
+# Custom blocklist file for manual additions via CLI
+# Modified by `skypier-blackhole add/remove` commands
+custom_list = "/etc/skypier/custom-blocklist.txt"
+
+# Enable wildcard domain matching (*.example.com)
+# Allows blocking entire subdomains efficiently
+enable_wildcards = true
+
+[logging]
+# Enable logging of blocked queries (with source IP and timestamp)
+# Useful for monitoring and troubleshooting
+log_blocked = true
+
+# Log file path
+# Ensure directory exists and is writable
+# Recommend using logrotate for rotation
+log_path = "/var/log/skypier/blackhole.log"
+
+# Log level: trace, debug, info, warn, error
+# - trace: Very verbose (development only)
+# - debug: Detailed debugging info
+# - info: General operational messages (recommended)
+# - warn: Warning messages only
+# - error: Errors only
+log_level = "info"
+
+[updater]
+# Enable automatic blocklist updates
+enabled = true
+
+# Update schedule in cron format
+# Default: "0 0 * * *" = Daily at midnight
+# Examples:
+#   - "0 */6 * * *" = Every 6 hours
+#   - "0 0 * * 0" = Weekly on Sunday
+#   - "0 0 1 * *" = Monthly on 1st
+schedule = "0 0 * * *"
+
+# Timezone for schedule (e.g., "EST", "UTC", "PST")
+timezone = "EST"
