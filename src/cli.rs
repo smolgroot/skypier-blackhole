@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use colored::*;
-use crate::{BlocklistManager, Config, DnsServer, Result};
+use crate::{BlocklistManager, BlocklistDownloader, Config, DnsServer, Result};
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
 use futures::stream::StreamExt;
@@ -45,9 +45,28 @@ async fn load_blocklist_from_config(
         }
     }
     
+    // Load from remote cache if it exists
+    let cache_dir = std::path::Path::new(&config.blocklist.custom_list)
+        .parent()
+        .unwrap_or(std::path::Path::new("/tmp"));
+    let cache_file = cache_dir.join("remote-blocklist-cache.txt");
+    
+    if cache_file.exists() {
+        tracing::info!("Loading remote blocklist cache from {}", cache_file.display());
+        let content = std::fs::read_to_string(&cache_file)?;
+        let domains: Vec<String> = content
+            .lines()
+            .filter(|line| !line.trim().is_empty() && !line.trim().starts_with('#'))
+            .map(|line| line.trim().to_string())
+            .collect();
+        tracing::info!("Loaded {} domains from remote cache", domains.len());
+        all_domains.extend(domains);
+    }
+    
     blocklist.load_domains(all_domains).await?;
     let count = blocklist.count().await;
-    tracing::info!("Loaded {} domains into blocklist", count);
+    tracing::info!("Loaded {} total domains into blocklist", count);
+
     
     Ok(())
 }
@@ -484,22 +503,67 @@ impl Cli {
                 let config = Config::load(config_path)?;
                 println!("{}", "🔄 Updating Blocklists".bright_cyan().bold());
                 println!();
-                println!("  {} This feature will download blocklists from remote sources", "ℹ".bright_blue());
-                println!("  {} Implementation coming soon in Phase 2", "⏳".bright_yellow());
-                println!();
-                println!("  {} Remote sources configured:", "🌐".bright_cyan());
                 
                 if config.blocklist.remote_lists.is_empty() {
-                    println!("    {} None configured", "ℹ".bright_yellow());
+                    println!("  {} No remote sources configured", "⚠".bright_yellow());
                     println!();
                     println!("  {} Add remote sources to your config:", "💡".bright_yellow());
                     println!("    {}", "[blocklist]".bright_blue());
                     println!("    {}", "remote_lists = [".bright_blue());
                     println!("    {}", "  \"https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts\"".bright_green());
                     println!("    {}", "]".bright_blue());
-                } else {
-                    for url in &config.blocklist.remote_lists {
-                        println!("    {} {}", "•".bright_white(), url.bright_blue());
+                    println!();
+                    return Ok(());
+                }
+                
+                println!("  {} Remote sources:", "🌐".bright_cyan());
+                for url in &config.blocklist.remote_lists {
+                    println!("    {} {}", "•".bright_white(), url.bright_blue());
+                }
+                println!();
+                
+                // Download blocklists
+                println!("  {} Downloading blocklists...", "⬇".bright_yellow());
+                let downloader = BlocklistDownloader::new()?;
+                
+                match downloader.download_multiple(&config.blocklist.remote_lists).await {
+                    Ok(domains) => {
+                        println!("  {} Downloaded {} unique domains", "✓".bright_green(), domains.len().to_string().bright_yellow().bold());
+                        
+                        // Save to a cache file
+                        let cache_dir = std::path::Path::new(&config.blocklist.custom_list)
+                            .parent()
+                            .unwrap_or(std::path::Path::new("/tmp"));
+                        let cache_file = cache_dir.join("remote-blocklist-cache.txt");
+                        
+                        println!("  {} Saving to cache: {}", "💾".bright_cyan(), cache_file.display().to_string().bright_blue());
+                        
+                        let content = domains.join("\n") + "\n";
+                        std::fs::write(&cache_file, content)?;
+                        
+                        println!("  {} Cache saved successfully", "✓".bright_green());
+                        
+                        // Trigger reload if server is running
+                        match find_server_pid()? {
+                            Some(pid) => {
+                                println!();
+                                println!("  {} Reloading server with new blocklists...", "🔄".bright_cyan());
+                                send_signal(pid, SIGHUP)?;
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                                println!("  {} Server reloaded successfully", "✓".bright_green().bold());
+                                println!("  {} {} domains now active", "🚫".bright_red(), domains.len().to_string().bright_yellow().bold());
+                            }
+                            None => {
+                                println!();
+                                println!("  {} Server not running", "ℹ".bright_yellow());
+                                println!("  {} Start the server to apply new blocklists:", "→".bright_white());
+                                println!("    {}", "skypier-blackhole start".bright_green());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("  {} Failed to download blocklists: {}", "✗".bright_red(), e);
+                        println!("  {} Check your internet connection and URLs", "ℹ".bright_yellow());
                     }
                 }
                 

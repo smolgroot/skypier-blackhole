@@ -1,0 +1,22 @@
+[server]
+listen_addr = "127.0.0.1"
+listen_port = 15355
+upstream_dns = ["1.1.1.1:53"]
+blocked_response = "refused"
+
+[blocklist]
+custom_list = "/tmp/skypier-update-test-custom.txt"
+local_lists = []
+remote_lists = [
+    "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+]
+
+[logging]
+log_blocked = true
+log_path = "/tmp/skypier-update-test.log"
+log_level = "info"
+
+[updater]
+enabled = true
+schedule = "0 0 * * *"
+timezone = "EST"
