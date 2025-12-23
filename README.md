@@ -347,12 +347,44 @@ Create a custom blocklist file (one domain per line):
 sudo nano /etc/skypier/custom-blocklist.txt
 
 # Add domains (one per line)
+# Exact matches
 ads.example.com
 tracker.example.com
-*.analytics.example.com  # Wildcard support
+
+# Wildcard support - blocks all subdomains
+*.analytics.example.com
+*.doubleclick.net
+*.googlesyndication.com
+
+# Comments are supported
+# This will block tracker.ads.facebook.com but NOT ads.facebook.com
+*.ads.facebook.com
 
 # Reload to apply changes
 sudo systemctl reload skypier-blackhole
+```
+
+#### Wildcard Matching Rules
+
+Wildcard syntax `*.domain.com` blocks **all subdomains** but **not** the base domain:
+
+| Blocklist Entry | Blocks | Allows |
+|-----------------|--------|--------|
+| `*.example.com` | `sub.example.com`<br>`deep.sub.example.com`<br>`ads.example.com` | `example.com` |
+| `*.ads.example.com` | `tracker.ads.example.com`<br>`banner.ads.example.com` | `ads.example.com`<br>`example.com` |
+| `exact.com` | `exact.com` only | `sub.exact.com` |
+
+**Examples**:
+```bash
+# Block all Google advertising subdomains
+*.googlesyndication.com
+
+# Block all Facebook tracking subdomains  
+*.facebook.com
+
+# Block specific ad networks
+*.doubleclick.net
+*.advertising.com
 ```
 
 ### Integration with VPN Nodes
