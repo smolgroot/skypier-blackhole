@@ -1,0 +1,24 @@
+# Test Configuration for Skypier Blackhole
+# Use a high port for testing (no sudo required)
+
+[server]
+listen_addr = "127.0.0.1"
+listen_port = 15353  # High port for testing without sudo (avoiding 5353 used by mDNS)
+upstream_dns = ["1.1.1.1:53"]
+blocked_response = "refused"
+
+[blocklist]
+remote_lists = []
+local_lists = []
+custom_list = "/tmp/skypier-test-blocklist.txt"
+enable_wildcards = true
+
+[logging]
+log_blocked = true
+log_path = "/tmp/skypier-blackhole-test.log"
+log_level = "debug"
+
+[updater]
+enabled = false
+schedule = "0 0 * * *"
+timezone = "EST"

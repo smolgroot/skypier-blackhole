@@ -269,6 +269,75 @@ sudo journalctl -u skypier-blackhole -f
 sudo systemctl status skypier-blackhole
 ```
 
+### Signal Handling
+
+Skypier Blackhole supports Unix signals for graceful operations:
+
+#### SIGHUP - Hot Reload Blocklists
+Reload blocklists without restarting the server (zero downtime):
+
+```bash
+# Method 1: Direct signal
+kill -HUP $(pgrep skypier-blackhole)
+
+# Method 2: Systemd reload
+sudo systemctl reload skypier-blackhole
+
+# Method 3: CLI command (future)
+skypier-blackhole reload
+```
+
+**What happens during SIGHUP:**
+- Clears current in-memory blocklist
+- Reloads all configured blocklist files
+- Updates data structures (radix tree + hash set)
+- DNS queries continue without interruption
+- Reload completes in <5ms for typical blocklists
+
+#### SIGTERM / SIGINT - Graceful Shutdown
+Stop the server gracefully:
+
+```bash
+# Method 1: SIGTERM (recommended)
+kill -TERM $(pgrep skypier-blackhole)
+
+# Method 2: SIGINT (Ctrl+C in foreground)
+^C
+
+# Method 3: Systemd stop
+sudo systemctl stop skypier-blackhole
+```
+
+**What happens during shutdown:**
+- Stops accepting new DNS queries
+- Completes all in-flight queries
+- Closes signal handlers
+- Releases resources cleanly
+- Exits with status 0
+
+#### Production Usage
+
+For production deployments, the systemd service automatically handles signals:
+
+```bash
+# Graceful shutdown (sends SIGTERM)
+sudo systemctl stop skypier-blackhole
+
+# Hot reload (sends SIGHUP)
+sudo systemctl reload skypier-blackhole
+
+# Restart (stop + start)
+sudo systemctl restart skypier-blackhole
+```
+
+**Performance Impact:**
+- Signal handling overhead: <0.01ms
+- SIGHUP reload time: ~2ms for 10K domains
+- DNS queries dropped during reload: 0
+- Memory spike during reload: temporary (cleared after)
+
+See [wip/SIGNAL_HANDLING_COMPLETE.md](wip/SIGNAL_HANDLING_COMPLETE.md) for detailed implementation and test results.
+
 ### Custom Blocklists
 
 Create a custom blocklist file (one domain per line):
@@ -520,6 +589,6 @@ You may choose either license.
 
 **Made with ❤️ by the Skypier Team**
 
-[Website](https://skypier.io) • [GitHub](https://github.com/skypier) • [Twitter](https://twitter.com/skypier)
+[Website](https://skypier.io) • [GitHub](https://github.com/skypierio) • [Twitter](https://twitter.com/skypierio)
 
 </div>

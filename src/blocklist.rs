@@ -22,15 +22,18 @@ impl BlocklistManager {
     
     /// Check if a domain is blocked
     pub async fn is_blocked(&self, domain: &str) -> bool {
+        // Normalize domain: remove trailing dot if present
+        let normalized = domain.trim_end_matches('.');
+        
         // Check exact match first
         let exact = self.exact_matches.read().await;
-        if exact.contains(domain) {
+        if exact.contains(normalized) {
             return true;
         }
         
         // Check wildcard matches in trie
         let trie = self.domains.read().await;
-        trie.get(domain).is_some()
+        trie.get(normalized).is_some()
     }
     
     /// Add a domain to the blocklist
@@ -73,6 +76,24 @@ impl BlocklistManager {
         let exact = self.exact_matches.read().await;
         exact.len()
     }
+    
+    /// Clear all domains from the blocklist
+    pub async fn clear(&self) -> Result<()> {
+        let mut exact = self.exact_matches.write().await;
+        let mut trie = self.domains.write().await;
+        
+        exact.clear();
+        *trie = Trie::new();
+        
+        Ok(())
+    }
+    
+    /// Reload blocklist (clear and load new domains)
+    pub async fn reload(&self, domains: Vec<String>) -> Result<()> {
+        self.clear().await?;
+        self.load_domains(domains).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -89,5 +110,18 @@ mod tests {
         
         manager.remove_domain("example.com").await.unwrap();
         assert!(!manager.is_blocked("example.com").await);
+    }
+    
+    #[tokio::test]
+    async fn test_reload() {
+        let manager = BlocklistManager::new();
+        
+        manager.load_domains(vec!["domain1.com".to_string()]).await.unwrap();
+        assert_eq!(manager.count().await, 1);
+        
+        manager.reload(vec!["domain2.com".to_string(), "domain3.com".to_string()]).await.unwrap();
+        assert_eq!(manager.count().await, 2);
+        assert!(!manager.is_blocked("domain1.com").await);
+        assert!(manager.is_blocked("domain2.com").await);
     }
 }
