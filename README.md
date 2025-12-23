@@ -1,12 +1,20 @@
-# Skypier Blackhole
 
 <div align="center">
 
+# Skypier Blackhole
+
+<img src="doc/logo.png" alt="Skypier Blackhole Logo" height="150">
+
 **High-Performance DNS-Based Domain Blocking for Skypier VPN Nodes**
 
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/skypier/skypier-blackhole)
+<p align="center">
+  <img src="https://img.shields.io/badge/Rust_1.70+-813374?style=flat&logo=rust&logoColor=white" alt="Rust 1.70+">
+  <img src="https://img.shields.io/badge/DNS_Resolver-813374?style=flat&logo=cloudflare&logoColor=white" alt="DNS Resolver">
+  <img src="https://img.shields.io/badge/VPN_Ready-813374?style=flat&logo=openvpn&logoColor=white" alt="VPN Ready">
+  <img src="https://img.shields.io/badge/Tokio_Async-813374?style=flat&logo=tokio&logoColor=white" alt="Tokio Async">
+  <img src="https://img.shields.io/badge/Zero_Unsafe-813374?style=flat&logo=rust&logoColor=white" alt="Zero Unsafe">
+  <img src="https://img.shields.io/badge/License-MIT-813374?style=flat" alt="MIT License">
+</p>
 
 *Block ads, trackers, and unwanted domains at the DNS level with lightning-fast performance*
 
@@ -18,14 +26,14 @@ Skypier Blackhole is a Rust-based DNS resolver designed to run alongside Skypier
 
 ### Key Features
 
-- ⚡ **Blazing Fast**: Sub-100μs latency for blocked queries
-- 🔒 **Memory Safe**: Written in Rust with zero unsafe code
-- 🔄 **Hot Reload**: Update blocklists without service restart
-- 🤖 **Auto-Update**: Daily automatic downloads from GitHub blocklists
-- 🌐 **Wildcard Support**: Block entire subdomains with `*.domain.com`
-- 📊 **Monitoring**: Real-time statistics and detailed logging
-- 🐧 **Production Ready**: Systemd integration and DEB packages
-- 🔧 **Easy Configuration**: Simple TOML config with sensible defaults
+- **Blazing Fast**: Sub-100μs latency for blocked queries
+- **Memory Safe**: Written in Rust with zero unsafe code
+- **Hot Reload**: Update blocklists without service restart
+- **Auto-Update**: Daily automatic downloads from GitHub blocklists
+- **Wildcard Support**: Block entire subdomains with `*.domain.com`
+- **Monitoring**: Real-time statistics and detailed logging
+- **Production Ready**: Systemd integration and DEB packages
+- **Easy Configuration**: Simple TOML config with sensible defaults
 
 ### Performance
 
