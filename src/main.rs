@@ -1,22 +1,19 @@
 use clap::Parser;
-use skypier_blackhole::{Cli, Config, Result};
+use skypier_blackhole::{Cli, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Parse CLI arguments
-    let cli = Cli::parse();
-    
     // Setup logging
     skypier_blackhole::setup_logging()?;
     
-    // Load configuration
-    let config = Config::load(&cli.config)?;
+    // Parse CLI arguments
+    let cli = Cli::parse();
     
     tracing::info!("Starting Skypier Blackhole DNS resolver");
     tracing::info!("Version: {}", env!("CARGO_PKG_VERSION"));
     
-    // Execute CLI command
-    cli.execute(config).await?;
+    // Execute CLI command (each command loads its own config)
+    cli.execute().await?;
     
     Ok(())
 }
