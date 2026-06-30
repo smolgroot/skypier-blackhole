@@ -161,6 +161,36 @@ impl UpdateScheduler {
         info!("Manual update triggered via CLI");
         Self::run_update(&self.config, &self.blocklist).await
     }
+
+    /// Refresh remote blocklists once at daemon startup, in the background.
+    ///
+    /// Spawns a task so the DNS server starts serving immediately rather than
+    /// blocking on network I/O (which also avoids the resolver chicken-and-egg
+    /// when the host points its own DNS at this daemon). A failed download is
+    /// non-fatal: the daemon keeps serving the cached blocklist.
+    pub fn spawn_startup_refresh(&self) {
+        if !self.config.updater.update_on_start {
+            info!("Startup blocklist refresh disabled in configuration");
+            return;
+        }
+
+        if self.config.blocklist.remote_lists.is_empty() {
+            info!("No remote blocklists configured, skipping startup refresh");
+            return;
+        }
+
+        let config = Arc::clone(&self.config);
+        let blocklist = Arc::clone(&self.blocklist);
+        let sources = config.blocklist.remote_lists.len();
+
+        tokio::spawn(async move {
+            info!(sources, "Refreshing remote blocklists at startup");
+            match Self::run_update(&config, &blocklist).await {
+                Ok(count) => info!(domains = count, "Startup blocklist refresh complete"),
+                Err(e) => warn!(error = %e, "Startup refresh failed, using cached blocklist"),
+            }
+        });
+    }
     
     /// Get the next scheduled run time
     pub async fn next_run(&self) -> Option<chrono::DateTime<Utc>> {
@@ -220,6 +250,7 @@ mod tests {
                 enabled: true,
                 schedule: "0 0 0 * * *".to_string(),
                 timezone: "UTC".to_string(),
+                update_on_start: false,
             },
         }
     }

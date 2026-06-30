@@ -152,6 +152,7 @@ log_path = "/var/log/skypier/blackhole.log"
 enabled = true
 schedule = "0 0 0 * * *"  # Cron expression, 6-field with seconds (daily at midnight)
 timezone = "EST"        # Your timezone (UTC, EST, PST, etc.)
+update_on_start = true  # Also refresh remote lists once at startup (background)
 ```
 
 ### Automatic Updates
@@ -160,9 +161,11 @@ The scheduler runs in the background and automatically updates blocklists:
 
 **How it works**:
 1. When you run `skypier-blackhole start`, the scheduler starts automatically
-2. It downloads blocklists at the configured time (e.g., daily at midnight)
-3. Updates are applied with zero downtime (hot-reload)
-4. Logs show update results
+2. If `update_on_start = true`, it also runs one refresh right away (in the
+   background, so the DNS server starts serving immediately)
+3. It downloads blocklists at the configured time (e.g., daily at midnight)
+4. Updates are applied with zero downtime (hot-reload)
+5. Logs show update results
 
 **Configure schedule**:
 ```toml

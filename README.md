@@ -207,6 +207,7 @@ log_level = "info"                 # trace | debug | info | warn | error
 enabled = true
 schedule = "0 0 0 * * *"           # cron (6-field, with seconds); default is daily at midnight
 timezone = "EST"
+update_on_start = true             # also refresh remote lists once at startup (background)
 ```
 
 Full reference:
@@ -227,6 +228,7 @@ Full reference:
 | `updater` | `enabled` | `true` | Background auto-update |
 | | `schedule` | `0 0 0 * * *` | Cron expression (6-field: sec min hour dom month dow) |
 | | `timezone` | `EST` | Timezone the cron runs in |
+| | `update_on_start` | `true` | Refresh remote lists once at startup (background, non-fatal) |
 
 ### Blocklists
 
@@ -271,6 +273,12 @@ six-field cron expression (the leading field is **seconds**, as required by
 0 0 3 * * 0      Sundays at 03:00
 0 */30 * * * *   every thirty minutes
 ```
+
+With `update_on_start = true` (the default), the server also kicks off a one-off
+refresh as soon as it starts, so a freshly installed node doesn't wait for the
+first scheduled tick to pull its remote lists. This runs in the background after
+the DNS server is already serving, and a failed download is non-fatal — the
+daemon falls back to the cached list and logs a warning.
 
 You can always force a refresh by hand with `skypier-blackhole update`, and you
 can turn the scheduler off entirely with `enabled = false`.

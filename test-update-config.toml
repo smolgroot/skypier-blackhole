@@ -20,3 +20,4 @@ log_level = "info"
 enabled = true
 schedule = "0 0 0 * * *"
 timezone = "EST"
+update_on_start = true

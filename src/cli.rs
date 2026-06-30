@@ -296,6 +296,10 @@ impl Cli {
                     server.start().await
                 });
 
+                // Kick off a one-shot remote blocklist refresh in the background
+                // so the server is already serving while the download runs.
+                scheduler.spawn_startup_refresh();
+
                 // Wait for either server error or signal
                 tokio::select! {
                     result = server_task => {

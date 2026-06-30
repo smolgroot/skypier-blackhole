@@ -89,6 +89,10 @@ pub struct UpdaterConfig {
     /// Timezone for schedule (e.g., "EST", "UTC")
     #[serde(default = "default_timezone")]
     pub timezone: String,
+
+    /// Refresh remote blocklists once at daemon startup (in the background)
+    #[serde(default = "default_true")]
+    pub update_on_start: bool,
 }
 
 // Default value functions
@@ -230,6 +234,7 @@ impl Config {
                 enabled: true,
                 schedule: default_update_schedule(),
                 timezone: default_timezone(),
+                update_on_start: true,
             },
         }
     }
