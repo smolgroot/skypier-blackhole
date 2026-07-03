@@ -1,4 +1,6 @@
 use std::fmt;
+use std::io::IsTerminal;
+use std::sync::Mutex;
 
 use colored::{ColoredString, Colorize};
 use tracing::{Event, Level, Subscriber};
@@ -19,19 +21,44 @@ use crate::Result;
 /// 14:02:55 ERROR Error handling query: timed out
 /// ```
 /// Structured fields are rendered as dimmed `key=value` pairs after the message.
+///
+/// Consecutive identical lines are collapsed: on a terminal the line is
+/// redrawn in place with an `(xN)` counter; otherwise repeats are suppressed
+/// and summarized once a different line is logged.
 pub fn setup_logging() -> Result<()> {
     let filter = EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new("info"))?;
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
-        .event_format(CharmFormatter)
+        .event_format(CharmFormatter::new())
         .init();
 
     Ok(())
 }
 
 /// A compact, colorful event formatter inspired by charmbracelet/log.
-struct CharmFormatter;
+struct CharmFormatter {
+    dedup: Mutex<DedupState>,
+    /// Whether stdout is a terminal, i.e. whether in-place line rewriting
+    /// with ANSI cursor movement is safe.
+    is_tty: bool,
+}
+
+/// Tracks the last rendered line (sans timestamp) to collapse repeats.
+#[derive(Default)]
+struct DedupState {
+    last_body: String,
+    count: u64,
+}
+
+impl CharmFormatter {
+    fn new() -> Self {
+        Self {
+            dedup: Mutex::new(DedupState::default()),
+            is_tty: std::io::stdout().is_terminal(),
+        }
+    }
+}
 
 impl<S, N> FormatEvent<S, N> for CharmFormatter
 where
@@ -46,22 +73,60 @@ where
     ) -> fmt::Result {
         let meta = event.metadata();
 
+        // Render everything except the timestamp into a buffer so identical
+        // consecutive lines can be detected and collapsed.
+        let mut body = String::new();
+        {
+            let mut body_writer = Writer::new(&mut body);
+
+            // Colored, fixed-width level badge.
+            write!(body_writer, "{} ", level_badge(meta.level()))?;
+
+            // Message, then the remaining fields as `key=value` pairs.
+            let mut visitor = CharmVisitor {
+                writer: &mut body_writer,
+                wrote_message: false,
+                result: Ok(()),
+            };
+            event.record(&mut visitor);
+            visitor.result?;
+        }
+
         // Dimmed timestamp (local wall-clock time, seconds resolution).
-        let now = chrono::Local::now().format("%H:%M:%S");
-        write!(writer, "{} ", now.to_string().dimmed())?;
+        let now = chrono::Local::now().format("%H:%M:%S").to_string();
 
-        // Colored, fixed-width level badge.
-        write!(writer, "{} ", level_badge(meta.level()))?;
+        let mut state = self.dedup.lock().unwrap();
 
-        // Message, then the remaining fields as `key=value` pairs.
-        let mut visitor = CharmVisitor {
-            writer: &mut writer,
-            wrote_message: false,
-            result: Ok(()),
-        };
-        event.record(&mut visitor);
-        visitor.result?;
+        if state.last_body == body {
+            state.count += 1;
+            if self.is_tty {
+                // Move the cursor up over the previous line, clear it, and
+                // redraw with a fresh timestamp and repeat counter.
+                write!(writer, "\x1b[1A\x1b[2K{} {}", now.dimmed(), body)?;
+                writeln!(writer, " {}", format!("(x{})", state.count).dimmed())?;
+            }
+            // Non-TTY: suppress the repeat; it is summarized below once a
+            // different line comes in. Leaving the buffer empty means the
+            // fmt layer writes nothing for this event.
+            return Ok(());
+        }
 
+        // On non-TTY output, account for the repeats we swallowed.
+        if !self.is_tty && state.count > 1 {
+            writeln!(
+                writer,
+                "{} {} {}",
+                now.dimmed(),
+                state.last_body,
+                format!("(repeated {} more times)", state.count - 1).dimmed()
+            )?;
+        }
+
+        state.last_body = body.clone();
+        state.count = 1;
+        drop(state);
+
+        write!(writer, "{} {}", now.dimmed(), body)?;
         writeln!(writer)
     }
 }
