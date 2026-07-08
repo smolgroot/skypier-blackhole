@@ -36,8 +36,10 @@ futures = "0.3"
 
 # DNS server
 hickory-server = "0.24"
-hickory-client = "0.24"
+hickory-client = { version = "0.24", features = ["dns-over-https-rustls"] }
 hickory-proto = "0.24"
+rustls = "0.21"
+webpki-roots = "0.25"
 
 # CLI
 clap = { version = "4.4", features = ["derive", "cargo"] }
