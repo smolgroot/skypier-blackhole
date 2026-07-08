@@ -1,6 +1,6 @@
 [package]
 name = "skypier-blackhole"
-version = "0.1.0"
+version = "0.1.3"
 edition = "2021"
 authors = ["Skypier Team"]
 description = "High-performance DNS-based domain blocking tool for Skypier VPN nodes"
@@ -13,6 +13,21 @@ categories = ["network-programming", "command-line-utilities"]
 [[bin]]
 name = "skypier-blackhole"
 path = "src/main.rs"
+
+[package.metadata.deb]
+maintainer = "Skypier Team"
+copyright = "Skypier Team"
+extended-description = "DNS resolver that blocks unwanted domains for Skypier VPN nodes."
+section = "net"
+priority = "optional"
+depends = "$auto"
+assets = [
+    ["target/release/skypier-blackhole", "usr/bin/", "755"],
+    ["config/blackhole.toml.example", "etc/skypier/blackhole.toml", "644"],
+]
+conf-files = ["/etc/skypier/blackhole.toml"]
+maintainer-scripts = "debian/"
+systemd-units = { unit-name = "skypier-blackhole", unit-scripts = "systemd/", enable = true, start = true }
 
 [dependencies]
 # Async runtime

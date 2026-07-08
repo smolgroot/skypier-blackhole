@@ -12,7 +12,7 @@ impl BlocklistDownloader {
     pub fn new() -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
-            .user_agent("Skypier-Blackhole/0.1.0")
+            .user_agent("Skypier-Blackhole/0.1.3")
             .build()?;
 
         Ok(BlocklistDownloader { client })
