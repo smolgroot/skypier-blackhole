@@ -53,7 +53,7 @@ round trip you'd otherwise pay to reach the upstream resolver.
 
 ## How it works
 
-[![asciicast](https://asciinema.org/a/1260394.svg)](https://asciinema.org/a/1260394)
+<a href="https://asciinema.org/a/1260394" target="_blank"><img src="https://asciinema.org/a/1260394.svg" /></a>
 
 A query comes in over UDP/TCP on port 53. Before forwarding anything, the
 server checks the domain against the in-memory blocklist:
