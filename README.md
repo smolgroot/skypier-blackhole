@@ -29,6 +29,8 @@ with no unsafe code. The lookup path is plain in-memory data structures, so
 deciding whether a domain is blocked costs nothing compared to the network
 round trip you'd otherwise pay to reach the upstream resolver.
 
+<a href="https://asciinema.org/a/1260394" target="_blank"><img src="https://asciinema.org/a/1260394.svg" /></a>
+
 ## Table of Contents
 
 - [How it works](#how-it-works)
@@ -53,8 +55,6 @@ round trip you'd otherwise pay to reach the upstream resolver.
 
 ## How it works
 
-<a href="https://asciinema.org/a/1260394" target="_blank"><img src="https://asciinema.org/a/1260394.svg" /></a>
-
 A query comes in over UDP/TCP on port 53. Before forwarding anything, the
 server checks the domain against the in-memory blocklist:
 
@@ -68,10 +68,12 @@ query ──> bloom filter ──(maybe)──> hashset (exact) ──> radix tr
         forward upstream                    return blocked response
 ```
 
+![Blocklist lookup path](doc/diagram.svg)
+
 The bloom filter is a cheap first pass: if it says "no", the domain is
 definitely not on the list and we skip straight to forwarding. If it says
 "maybe", we confirm with an exact-match hashset, then fall back to the radix
-trie for wildcard rules like `*.doubleclick.net`. Blocked queries never touch
+trie for wildcard rules like `*.malware.xyz`. Blocked queries never touch
 the network, so they come back about as fast as the kernel can hand the packet
 back to you.
 
@@ -181,7 +183,7 @@ $ skypier-blackhole start
 A blocked domain comes back `REFUSED`, anything else resolves normally:
 
 ```console
-$ dig +short @127.0.0.1 doubleclick.net
+$ dig +short @127.0.0.1 malware.xyz
 ;; ->>HEADER<<- opcode: QUERY, status: REFUSED
 
 $ dig +short @127.0.0.1 google.com
@@ -192,8 +194,8 @@ You don't need a running server to ask whether a domain would be blocked. The
 `test` subcommand loads the same lists from disk and reports the verdict:
 
 ```console
-$ skypier-blackhole test doubleclick.net
-Testing domain: doubleclick.net
+$ skypier-blackhole test malware.xyz
+Testing domain: malware.xyz
 
   [x] Status: BLOCKED
   [i] This domain will be blocked by the DNS server
@@ -279,7 +281,7 @@ A custom list looks like this:
 ads.example.com
 tracker.example.com
 
-*.doubleclick.net
+*.malware.xyz
 *.googlesyndication.com
 ```
 
