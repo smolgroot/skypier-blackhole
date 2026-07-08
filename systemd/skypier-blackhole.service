@@ -1,6 +1,6 @@
 [Unit]
 Description=Skypier Blackhole DNS Resolver
-Documentation=https://github.com/skypier/skypier-blackhole
+Documentation=https://github.com/SkyPierIO/skypier-blackhole
 After=network-online.target
 Wants=network-online.target
 

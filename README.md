@@ -84,7 +84,7 @@ Unix only.
 You'll need a recent Rust toolchain (1.70 or newer).
 
 ```bash
-git clone https://github.com/skypier/skypier-blackhole.git
+git clone https://github.com/SkyPierIO/skypier-blackhole.git
 cd skypier-blackhole
 cargo build --release
 ```
@@ -107,7 +107,7 @@ the binary, a default config, and the systemd unit in the right places and
 enables the service:
 
 ```bash
-wget https://github.com/skypier/skypier-blackhole/releases/latest/download/skypier-blackhole_amd64.deb
+wget https://github.com/SkyPierIO/skypier-blackhole/releases/latest/download/skypier-blackhole_amd64.deb
 sudo dpkg -i skypier-blackhole_amd64.deb
 sudo systemctl status skypier-blackhole
 ```
