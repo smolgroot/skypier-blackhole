@@ -334,6 +334,7 @@ skypier-blackhole update             # pull remote lists now
 skypier-blackhole test <domain>      # would this domain be blocked?
 skypier-blackhole add <domain>       # append to the custom list, reload
 skypier-blackhole remove <domain>    # drop from the custom list, reload
+skypier-blackhole tui                # run the server with a live dashboard
 ```
 
 `add` and `remove` edit the custom list and, if the server is up, reload it on
@@ -368,6 +369,25 @@ Skypier Blackhole Status
 
 ==================================================
 ```
+
+### Interactive dashboard (TUI)
+
+`skypier-blackhole tui` runs the DNS server with a full-screen terminal
+dashboard instead of plain log output. It shows a live activity log (blocked
+queries highlighted), the configured upstream resolvers, in-memory session
+stats (query counts, block rate, top blocked domains since startup; nothing is
+persisted), and a blocklist summary with per-source counts and the last/next
+remote update.
+
+Key bindings:
+
+| Key | Action |
+|-----|--------|
+| `a` | add a domain to the custom list (live) |
+| `d` | remove a domain from the custom list (live) |
+| `u` | download remote blocklists now |
+| `r` | reload all lists from disk |
+| `q` / `Esc` / `Ctrl+C` | quit |
 
 ### Running under systemd
 
@@ -481,8 +501,8 @@ setting) at the host.
 **Can I whitelist domains?** Not yet, that's planned. For now, remove a domain
 from your lists rather than overriding it.
 
-**Multiple upstreams?** Yes, list them in `upstream_dns`. The first one that
-answers is used.
+**Multiple upstreams?** Yes, list them in `upstream_dns`. A random one is
+picked for each query, so no single resolver sees every lookup.
 
 **What list formats work?** One domain per line with `#` comments, including
 StevenBlack hosts files. Wildcards use the `*.domain.com` syntax.

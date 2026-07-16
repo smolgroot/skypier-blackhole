@@ -34,6 +34,9 @@ systemd-units = { unit-name = "skypier-blackhole", unit-scripts = "systemd/", en
 tokio = { version = "1.35", features = ["full"] }
 futures = "0.3"
 
+# Randomized upstream selection
+rand = "0.8"
+
 # DNS server
 hickory-server = "0.24"
 hickory-client = { version = "0.24", features = ["dns-over-https-rustls"] }
@@ -72,6 +75,8 @@ tokio-cron-scheduler = "0.10"
 signal-hook = "0.4"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 nix = { version = "0.31", features = ["signal"] }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
 
 [dev-dependencies]
 tempfile = "3.8"

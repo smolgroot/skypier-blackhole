@@ -1,3 +1,4 @@
+use crate::config::Upstream;
 use crate::{BlocklistDownloader, BlocklistManager, Config, DnsServer, Result, UpdateScheduler};
 use clap::{Parser, Subcommand};
 use colored::*;
@@ -5,7 +6,6 @@ use futures::stream::StreamExt;
 use signal_hook::consts::signal::*;
 use signal_hook_tokio::Signals;
 use std::fs;
-use std::io::Write;
 use std::sync::Arc;
 
 // Platform-specific default config path
@@ -21,17 +21,19 @@ const DEFAULT_CONFIG_PATH: &str = "C:\\ProgramData\\Skypier\\blackhole.toml";
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 const DEFAULT_CONFIG_PATH: &str = "blackhole.toml";
 
-/// Print the startup ASCII art banner
-fn print_banner() {
-    let banner = r#"
+/// ASCII art logo, shared by the console banner and the TUI dashboard
+pub(crate) const BANNER: &str = r#"
        ____  __           __    __          __
       / __ )/ /___ ______/ /__ / /_  ____  / /__
      / __  / / __ `/ ___/ //_// __ \/ __ \/ / _ \
  ___/ /_/ / / /_/ / /__/ ,<  / / / / /_/ / /  __/__
 /________/_/\__,_/\___/_/|_|/_/ /_/\____/_/\______/
-   
+
 "#;
-    println!("{}", banner.bright_cyan());
+
+/// Print the startup ASCII art banner
+fn print_banner() {
+    println!("{}", BANNER.bright_cyan());
     println!(
         "  {} {}",
         "Skypier Blackhole".bright_white().bold(),
@@ -44,66 +46,22 @@ fn print_banner() {
     println!();
 }
 
-/// Load blocklist from configuration
-async fn load_blocklist_from_config(config: &Config, blocklist: &BlocklistManager) -> Result<()> {
-    let mut all_domains = Vec::new();
-
-    // Load from custom file if it exists
-    if std::path::Path::new(&config.blocklist.custom_list).exists() {
-        tracing::info!("Loading blocklist from {}", config.blocklist.custom_list);
-        let content = std::fs::read_to_string(&config.blocklist.custom_list)?;
-        let domains: Vec<String> = content
-            .lines()
-            .filter(|line| !line.trim().is_empty() && !line.trim().starts_with('#'))
-            .map(|line| line.trim().to_string())
-            .collect();
-        all_domains.extend(domains);
+/// Render the configured upstreams for display; queries are forwarded to a
+/// randomly picked one per query rather than always the first in the list
+fn format_upstream_list(upstreams: &[Upstream]) -> String {
+    if upstreams.is_empty() {
+        return "1.1.1.1:53".to_string();
+    }
+    let list = upstreams
+        .iter()
+        .map(|u| u.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    if upstreams.len() > 1 {
+        format!("{list} (random per query)")
     } else {
-        tracing::warn!("Blocklist file not found: {}", config.blocklist.custom_list);
+        list
     }
-
-    // Load from local lists
-    for local_list in &config.blocklist.local_lists {
-        if std::path::Path::new(local_list).exists() {
-            tracing::info!("Loading local blocklist from {}", local_list);
-            let content = std::fs::read_to_string(local_list)?;
-            let domains: Vec<String> = content
-                .lines()
-                .filter(|line| !line.trim().is_empty() && !line.trim().starts_with('#'))
-                .map(|line| line.trim().to_string())
-                .collect();
-            all_domains.extend(domains);
-        } else {
-            tracing::warn!("Local blocklist file not found: {}", local_list);
-        }
-    }
-
-    // Load from remote cache if it exists
-    let cache_dir = std::path::Path::new(&config.blocklist.custom_list)
-        .parent()
-        .unwrap_or(std::path::Path::new("/tmp"));
-    let cache_file = cache_dir.join("remote-blocklist-cache.txt");
-
-    if cache_file.exists() {
-        tracing::info!(
-            "Loading remote blocklist cache from {}",
-            cache_file.display()
-        );
-        let content = std::fs::read_to_string(&cache_file)?;
-        let domains: Vec<String> = content
-            .lines()
-            .filter(|line| !line.trim().is_empty() && !line.trim().starts_with('#'))
-            .map(|line| line.trim().to_string())
-            .collect();
-        tracing::info!("Loaded {} domains from remote cache", domains.len());
-        all_domains.extend(domains);
-    }
-
-    blocklist.load_domains(all_domains).await?;
-    let count = blocklist.count().await;
-    tracing::info!("Loaded {} total domains into blocklist", count);
-
-    Ok(())
 }
 
 /// Find the PID of the running skypier-blackhole server
@@ -226,11 +184,27 @@ pub enum Commands {
         #[arg(short, long, default_value_t = DEFAULT_CONFIG_PATH.to_string())]
         config: String,
     },
+
+    /// Start the DNS server with an interactive terminal dashboard
+    Tui {
+        /// Path to configuration file
+        #[arg(short, long, default_value_t = DEFAULT_CONFIG_PATH.to_string())]
+        config: String,
+    },
 }
 
 impl Cli {
+    /// Whether the TUI dashboard was requested (it owns the terminal, so the
+    /// console logger must not be installed)
+    pub fn is_tui(&self) -> bool {
+        matches!(self.command, Some(Commands::Tui { .. }))
+    }
+
     pub async fn execute(&self) -> Result<()> {
         match &self.command {
+            Some(Commands::Tui {
+                config: config_path,
+            }) => crate::tui::run(config_path).await,
             Some(Commands::Start {
                 config: config_path,
             }) => {
@@ -243,7 +217,7 @@ impl Cli {
                 let blocklist = Arc::new(BlocklistManager::new());
 
                 // Load initial blocklist
-                load_blocklist_from_config(&config, &blocklist).await?;
+                crate::loader::load_blocklist(&config, &blocklist).await?;
                 tracing::info!("Blocklist manager initialized");
 
                 // Create and start update scheduler
@@ -278,7 +252,7 @@ impl Cli {
                             }
                             SIGHUP => {
                                 tracing::info!("Received SIGHUP, reloading blocklists...");
-                                match load_blocklist_from_config(&config_clone, &blocklist_clone)
+                                match crate::loader::load_blocklist(&config_clone, &blocklist_clone)
                                     .await
                                 {
                                     Ok(_) => {
@@ -456,7 +430,7 @@ impl Cli {
                 // Load config and show blocklist stats
                 if std::path::Path::new(&config.blocklist.custom_list).exists() {
                     let blocklist = BlocklistManager::new();
-                    load_blocklist_from_config(&config, &blocklist).await?;
+                    crate::loader::load_blocklist(&config, &blocklist).await?;
                     let count = blocklist.count().await;
 
                     println!("  {} Blocklist Statistics:", "[*]".bright_cyan());
@@ -505,13 +479,7 @@ impl Cli {
                 println!(
                     "    {} Upstream DNS: {}",
                     "-".bright_white(),
-                    config
-                        .server
-                        .upstream_dns
-                        .first()
-                        .map(|u| u.to_string())
-                        .unwrap_or_else(|| "1.1.1.1:53".to_string())
-                        .bright_green()
+                    format_upstream_list(&config.server.upstream_dns).bright_green()
                 );
 
                 println!();
@@ -533,12 +501,7 @@ impl Cli {
                 println!();
 
                 // Add to custom blocklist file
-                let mut file = fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&config.blocklist.custom_list)?;
-
-                writeln!(file, "{}", domain)?;
+                crate::loader::append_custom_domain(&config, domain)?;
 
                 println!(
                     "  {} Domain added to: {}",
@@ -580,23 +543,9 @@ impl Cli {
                 );
                 println!();
 
-                // Read current blocklist
-                let content = fs::read_to_string(&config.blocklist.custom_list)?;
-                let domains: Vec<String> = content
-                    .lines()
-                    .map(|line| line.trim().to_string())
-                    .filter(|line| !line.is_empty() && line != domain)
-                    .collect();
-
-                let original_count = content.lines().count();
-                let new_count = domains.len();
-
-                if original_count == new_count {
+                if crate::loader::remove_custom_domain(&config, domain)?.is_none() {
                     println!("  {} Domain not found in blocklist", "[i]".bright_yellow());
                 } else {
-                    // Write back with trailing newline
-                    let content = domains.join("\n") + "\n";
-                    fs::write(&config.blocklist.custom_list, content)?;
                     println!(
                         "  {} Domain removed from: {}",
                         "[ok]".bright_green(),
@@ -635,7 +584,7 @@ impl Cli {
                 println!();
 
                 let blocklist = BlocklistManager::new();
-                load_blocklist_from_config(&config, &blocklist).await?;
+                crate::loader::load_blocklist(&config, &blocklist).await?;
                 let total = blocklist.count().await;
 
                 println!(
@@ -824,7 +773,7 @@ impl Cli {
                 println!();
 
                 let blocklist = BlocklistManager::new();
-                load_blocklist_from_config(&config, &blocklist).await?;
+                crate::loader::load_blocklist(&config, &blocklist).await?;
 
                 let is_blocked = blocklist.is_blocked(domain).await;
 
@@ -856,13 +805,7 @@ impl Cli {
                     println!(
                         "  {} DNS queries will be forwarded to upstream: {}",
                         "->".bright_white(),
-                        config
-                            .server
-                            .upstream_dns
-                            .first()
-                            .map(|u| u.to_string())
-                            .unwrap_or_else(|| "1.1.1.1:53".to_string())
-                            .bright_cyan()
+                        format_upstream_list(&config.server.upstream_dns).bright_cyan()
                     );
                 }
 

@@ -1,5 +1,5 @@
 use crate::config::Upstream;
-use crate::{BlocklistManager, Config, Result};
+use crate::{BlocklistManager, Config, Result, RuntimeMetrics};
 use hickory_client::client::{AsyncClient, ClientHandle};
 use hickory_client::udp::UdpClientStream;
 use hickory_proto::h2::HttpsClientStreamBuilder;
@@ -7,44 +7,40 @@ use hickory_proto::iocompat::AsyncIoTokioAsStd;
 use hickory_proto::op::{Message, MessageType, OpCode, ResponseCode};
 use hickory_proto::rr::{Name, RData, Record, RecordType};
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
+use rand::Rng;
+use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
 use tokio::net::{TcpStream as TokioTcpStream, UdpSocket};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 /// DNS server that blocks domains from blocklist and forwards allowed queries
 pub struct DnsServer {
     config: Arc<Config>,
     blocklist: Arc<BlocklistManager>,
-    stats: Arc<RwLock<Statistics>>,
-    /// Cached connection to the upstream resolver, established lazily
-    upstream_client: Arc<Mutex<Option<AsyncClient>>>,
-}
-
-/// Statistics for monitoring
-#[derive(Debug, Default)]
-pub struct Statistics {
-    pub total_queries: u64,
-    pub blocked_queries: u64,
-    pub allowed_queries: u64,
-    pub start_time: Option<std::time::Instant>,
+    /// Cached connections to upstream resolvers, keyed by upstream and
+    /// established lazily. A random upstream is picked per query (see
+    /// `forward_to_upstream`), so several of these may be live at once.
+    upstream_clients: Arc<Mutex<HashMap<Upstream, AsyncClient>>>,
+    /// In-RAM query metrics, updated for every query
+    metrics: Arc<RuntimeMetrics>,
 }
 
 impl DnsServer {
     /// Create a new DNS server instance
     pub fn new(config: Config, blocklist: Arc<BlocklistManager>) -> Result<Self> {
-        let stats = Statistics {
-            start_time: Some(std::time::Instant::now()),
-            ..Default::default()
-        };
-
         Ok(DnsServer {
             config: Arc::new(config),
             blocklist,
-            stats: Arc::new(RwLock::new(stats)),
-            upstream_client: Arc::new(Mutex::new(None)),
+            upstream_clients: Arc::new(Mutex::new(HashMap::new())),
+            metrics: Arc::new(RuntimeMetrics::new()),
         })
+    }
+
+    /// Handle to the in-RAM query metrics (consumed by the TUI dashboard)
+    pub fn metrics(&self) -> Arc<RuntimeMetrics> {
+        Arc::clone(&self.metrics)
     }
 
     /// Start the DNS server
@@ -60,15 +56,16 @@ impl DnsServer {
         let socket = UdpSocket::bind(&listen_addr).await?;
         tracing::info!(proto = "UDP", addr = %listen_addr, "DNS server listening");
 
-        // Create upstream DNS client
-        let upstream = self
-            .config
-            .server
-            .upstream_dns
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("No upstream DNS configured"))?;
+        // Validate upstream DNS configuration
+        let upstreams = &self.config.server.upstream_dns;
+        if upstreams.is_empty() {
+            return Err(anyhow::anyhow!("No upstream DNS configured"));
+        }
 
-        tracing::info!(upstream = %upstream, "Using upstream DNS");
+        tracing::info!(
+            count = upstreams.len(),
+            "Upstream DNS servers configured; a random one is chosen per query"
+        );
 
         // Main server loop
         self.run_server(socket).await?;
@@ -120,12 +117,6 @@ impl DnsServer {
         src: SocketAddr,
         socket: Arc<UdpSocket>,
     ) -> Result<()> {
-        // Update statistics
-        {
-            let mut stats = self.stats.write().await;
-            stats.total_queries += 1;
-        }
-
         // Extract query information
         let query_name = match query.queries().first() {
             Some(q) => q.name().to_utf8(),
@@ -141,24 +132,17 @@ impl DnsServer {
         let is_blocked = self.blocklist.is_blocked(&query_name).await;
 
         let response = if is_blocked {
-            // Domain is blocked
-            tracing::info!(domain = %query_name, source_ip = %src.ip(), "blocked");
-
-            {
-                let mut stats = self.stats.write().await;
-                stats.blocked_queries += 1;
-            }
+            // The `blocked` marker field is what the TUI keys its highlighting
+            // on; keep it if the message text changes.
+            tracing::info!(domain = %query_name, source_ip = %src.ip(), blocked = true, "blocked");
+            self.metrics.record_blocked(&query_name);
 
             // Create blocked response
             self.create_blocked_response(&query)
         } else {
             // Domain is allowed - forward to upstream
             tracing::debug!(domain = %query_name, source_ip = %src.ip(), "allowed");
-
-            {
-                let mut stats = self.stats.write().await;
-                stats.allowed_queries += 1;
-            }
+            self.metrics.record_allowed();
 
             // Forward to upstream DNS
             self.forward_to_upstream(query).await?
@@ -214,13 +198,15 @@ impl DnsServer {
     }
 
     /// Forward query to upstream DNS server
+    ///
+    /// Picks a random upstream for each query rather than always using the
+    /// first configured one, so no single resolver sees every lookup.
     async fn forward_to_upstream(&self, query: Message) -> Result<Message> {
-        let upstream = self
-            .config
-            .server
-            .upstream_dns
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("No upstream DNS configured"))?;
+        let upstreams = &self.config.server.upstream_dns;
+        if upstreams.is_empty() {
+            return Err(anyhow::anyhow!("No upstream DNS configured"));
+        }
+        let upstream = &upstreams[rand::thread_rng().gen_range(0..upstreams.len())];
 
         // Save original query ID
         let original_id = query.id();
@@ -244,7 +230,7 @@ impl DnsServer {
                 // The cached connection may have gone stale (e.g. the upstream
                 // closed an idle HTTP/2 session); reconnect and retry once
                 tracing::debug!(error = %e, upstream = %upstream, "Upstream query failed, reconnecting");
-                self.upstream_client.lock().await.take();
+                self.upstream_clients.lock().await.remove(upstream);
                 let mut client = self.upstream_client(upstream).await?;
                 client
                     .query(name, hickory_proto::rr::DNSClass::IN, query_type)
@@ -259,14 +245,14 @@ impl DnsServer {
         Ok(response)
     }
 
-    /// Get the cached upstream client, connecting if necessary
+    /// Get the cached client for this upstream, connecting if necessary
     async fn upstream_client(&self, upstream: &Upstream) -> Result<AsyncClient> {
-        let mut cached = self.upstream_client.lock().await;
-        if let Some(client) = cached.as_ref() {
+        let mut cached = self.upstream_clients.lock().await;
+        if let Some(client) = cached.get(upstream) {
             return Ok(client.clone());
         }
         let client = Self::connect_upstream(upstream).await?;
-        *cached = Some(client.clone());
+        cached.insert(upstream.clone(), client.clone());
         Ok(client)
     }
 
@@ -289,17 +275,6 @@ impl DnsServer {
             }
         };
         Ok(client)
-    }
-
-    /// Get current statistics
-    pub async fn get_stats(&self) -> Statistics {
-        let stats = self.stats.read().await;
-        Statistics {
-            total_queries: stats.total_queries,
-            blocked_queries: stats.blocked_queries,
-            allowed_queries: stats.allowed_queries,
-            start_time: stats.start_time,
-        }
     }
 
     /// Stop the DNS server
@@ -339,19 +314,8 @@ impl Clone for DnsServer {
         DnsServer {
             config: Arc::clone(&self.config),
             blocklist: Arc::clone(&self.blocklist),
-            stats: Arc::clone(&self.stats),
-            upstream_client: Arc::clone(&self.upstream_client),
-        }
-    }
-}
-
-impl Clone for Statistics {
-    fn clone(&self) -> Self {
-        Statistics {
-            total_queries: self.total_queries,
-            blocked_queries: self.blocked_queries,
-            allowed_queries: self.allowed_queries,
-            start_time: self.start_time,
+            upstream_clients: Arc::clone(&self.upstream_clients),
+            metrics: Arc::clone(&self.metrics),
         }
     }
 }
