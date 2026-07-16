@@ -57,7 +57,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Data structures
-radix_trie = "0.2"
+radix_trie = "0.3"
 bloomfilter = "1.0"
 
 # Error handling
@@ -69,9 +69,9 @@ chrono = "0.4"
 tokio-cron-scheduler = "0.10"
 
 # Signal handling
-signal-hook = "0.3"
+signal-hook = "0.4"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
-nix = { version = "0.27", features = ["signal"] }
+nix = { version = "0.31", features = ["signal"] }
 ratatui = "0.29"
 crossterm = { version = "0.28", features = ["event-stream"] }
 
