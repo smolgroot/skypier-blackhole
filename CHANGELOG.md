@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-17
+
 ### Added
 
 - Interactive terminal dashboard (`skypier-blackhole tui`) built with
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blocklist summary panel with per-source counts and last/next remote update.
   Domains can be added/removed and remote lists updated/reloaded directly from
   the dashboard (`a`/`d`/`u`/`r`).
+- Support for randomized upstream DNS selection.
 
 ## [0.2.0] - 2026-07-09
 
