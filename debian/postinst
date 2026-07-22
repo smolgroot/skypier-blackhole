@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent group skypier >/dev/null; then
+        addgroup --system skypier
+    fi
+    if ! getent passwd skypier >/dev/null; then
+        adduser --system --ingroup skypier --home /var/lib/skypier \
+            --no-create-home --shell /usr/sbin/nologin skypier
+    fi
+    mkdir -p /var/lib/skypier /var/log/skypier
+    chown skypier:skypier /var/lib/skypier /var/log/skypier
+fi
+
+#DEBHELPER#
+
+exit 0

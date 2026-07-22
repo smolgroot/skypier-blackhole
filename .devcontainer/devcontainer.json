@@ -1,0 +1,49 @@
+{
+  "name": "skypier-blackhole (Rust)",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "upgradePackages": true
+    }
+  },
+
+  // Tools used by CI (cargo fmt / clippy) plus cargo-deb used by the release workflow.
+  "onCreateCommand": "rustup component add rustfmt clippy && cargo install cargo-deb --locked",
+
+  // The named volume mounted below is created owned by root on first use, which the
+  // non-root vscode user can't write to; fix ownership before warming the build cache.
+  "postCreateCommand": "sudo mkdir -p /usr/local/cargo/registry /usr/local/cargo/git && sudo chown -R vscode:vscode /usr/local/cargo/registry /usr/local/cargo/git && cargo fetch",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml",
+        "serayuzgur.crates"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        },
+        "rust-analyzer.check.command": "clippy"
+      }
+    }
+  },
+
+  "remoteEnv": {
+    "RUST_LOG": "debug"
+  },
+
+  // DNS server binds low/well-known ports (e.g. 53); expose common test ports.
+  "forwardPorts": [53],
+
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-cargo-registry,target=/usr/local/cargo/registry,type=volume"
+  ],
+
+  "remoteUser": "vscode"
+}

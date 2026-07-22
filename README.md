@@ -4,7 +4,7 @@
 
 <img src="doc/logo.png" alt="Skypier Blackhole Logo" height="240">
 
-DNS-based domain blocking for Skypier VPN nodes.
+A fast, blocklist-driven DNS sinkhole. Ad and tracker blocking for your server or local network.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Rust_1.70+-813374?style=flat&logo=rust&logoColor=white" alt="Rust 1.70+">
@@ -29,25 +29,41 @@ with no unsafe code. The lookup path is plain in-memory data structures, so
 deciding whether a domain is blocked costs nothing compared to the network
 round trip you'd otherwise pay to reach the upstream resolver.
 
+<a href="https://asciinema.org/a/1260394" target="_blank"><img src="https://asciinema.org/a/1260394.svg" /></a>
+
+## Table of Contents
+
+- [How it works](#how-it-works)
+- [Installing](#installing)
+  - [From source](#from-source)
+  - [Debian/Ubuntu package](#debianubuntu-package)
+  - [Default paths](#default-paths)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+  - [Blocklists](#blocklists)
+  - [Automatic updates](#automatic-updates)
+- [Usage](#usage)
+  - [Running under systemd](#running-under-systemd)
+  - [Signals](#signals)
+  - [Serving a network](#serving-a-network)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
 ## How it works
 
 A query comes in over UDP/TCP on port 53. Before forwarding anything, the
 server checks the domain against the in-memory blocklist:
 
-```
-query ──> bloom filter ──(maybe)──> hashset (exact) ──> radix trie (wildcard)
-              │                          │                      │
-           definitely                  hit?                   hit?
-           not blocked                  │                      │
-              │                         └──────────┬───────────┘
-              ▼                                     ▼
-        forward upstream                    return blocked response
-```
+![Blocklist lookup path](doc/diagram.svg)
 
 The bloom filter is a cheap first pass: if it says "no", the domain is
 definitely not on the list and we skip straight to forwarding. If it says
 "maybe", we confirm with an exact-match hashset, then fall back to the radix
-trie for wildcard rules like `*.doubleclick.net`. Blocked queries never touch
+trie for wildcard rules like `*.malware.xyz`. Blocked queries never touch
 the network, so they come back about as fast as the kernel can hand the packet
 back to you.
 
@@ -59,16 +75,16 @@ For the longer version, see [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
 
 ## Installing
 
-The project runs on Linux, macOS, and Windows. The signal-based hot reload
-(`SIGHUP`) is Unix only; on Windows you drive the same behaviour through the
-CLI instead.
+The current stable release runs on Linux and macOS. Windows support is in
+progress and will be released soon. The signal-based hot reload (`SIGHUP`) is
+Unix only.
 
 ### From source
 
 You'll need a recent Rust toolchain (1.70 or newer).
 
 ```bash
-git clone https://github.com/skypier/skypier-blackhole.git
+git clone https://github.com/SkyPierIO/skypier-blackhole.git
 cd skypier-blackhole
 cargo build --release
 ```
@@ -91,7 +107,7 @@ the binary, a default config, and the systemd unit in the right places and
 enables the service:
 
 ```bash
-wget https://github.com/skypier/skypier-blackhole/releases/latest/download/skypier-blackhole_amd64.deb
+wget https://github.com/SkyPierIO/skypier-blackhole/releases/latest/download/skypier-blackhole_amd64.deb
 sudo dpkg -i skypier-blackhole_amd64.deb
 sudo systemctl status skypier-blackhole
 ```
@@ -105,7 +121,7 @@ on every invocation:
 |----------|--------|------------------|-----|
 | Linux | `/etc/skypier/blackhole.toml` | `/etc/skypier/custom-blocklist.txt` | `/var/log/skypier/blackhole.log` |
 | macOS | `/usr/local/etc/skypier/blackhole.toml` | `/usr/local/etc/skypier/custom-blocklist.txt` | `/usr/local/var/log/skypier/blackhole.log` |
-| Windows | `C:\ProgramData\Skypier\blackhole.toml` | `C:\ProgramData\Skypier\custom-blocklist.txt` | `C:\ProgramData\Skypier\Logs\blackhole.log` |
+| Windows (planned) | `C:\ProgramData\Skypier\blackhole.toml` | `C:\ProgramData\Skypier\custom-blocklist.txt` | `C:\ProgramData\Skypier\Logs\blackhole.log` |
 
 Pass `--config /path/to/blackhole.toml` to override.
 
@@ -146,7 +162,7 @@ $ skypier-blackhole start
  ___/ /_/ / / /_/ / /__/ ,<  / / / / /_/ / /  __/__
 /________/_/\__,_/\___/_/|_|/_/ /_/\____/_/\______/
 
-  Skypier Blackhole v0.1.0
+  Skypier Blackhole v0.1.3
   A fast, blocklist-driven DNS sinkhole
 
   INFO Starting DNS server...
@@ -157,7 +173,7 @@ $ skypier-blackhole start
 A blocked domain comes back `REFUSED`, anything else resolves normally:
 
 ```console
-$ dig +short @127.0.0.1 doubleclick.net
+$ dig +short @127.0.0.1 malware.xyz
 ;; ->>HEADER<<- opcode: QUERY, status: REFUSED
 
 $ dig +short @127.0.0.1 google.com
@@ -168,8 +184,8 @@ You don't need a running server to ask whether a domain would be blocked. The
 `test` subcommand loads the same lists from disk and reports the verdict:
 
 ```console
-$ skypier-blackhole test doubleclick.net
-Testing domain: doubleclick.net
+$ skypier-blackhole test malware.xyz
+Testing domain: malware.xyz
 
   [x] Status: BLOCKED
   [i] This domain will be blocked by the DNS server
@@ -187,7 +203,7 @@ the upstream servers, and which blocklists to pull.
 [server]
 listen_addr = "127.0.0.1"          # "0.0.0.0" to serve a whole network
 listen_port = 53
-upstream_dns = ["1.1.1.1:53", "8.8.8.8:53"]
+upstream_dns = ["1.1.1.1:53", "8.8.8.8:53"]  # plain DNS and/or DoH (see below)
 blocked_response = "refused"       # "refused" | "nxdomain" | { ip = "0.0.0.0" }
 
 [blocklist]
@@ -216,7 +232,7 @@ Full reference:
 |---------|-----|---------|-------|
 | `server` | `listen_addr` | `127.0.0.1` | Use `0.0.0.0` to serve other machines |
 | | `listen_port` | `53` | Ports below 1024 need privileges (see below) |
-| | `upstream_dns` | `["1.1.1.1:53"]` | First responsive server wins |
+| | `upstream_dns` | `["1.1.1.1:53"]` | Plain `ip:port` or DoH `https://...` (see below) |
 | | `blocked_response` | `refused` | `refused`, `nxdomain`, or `{ ip = "..." }` |
 | `blocklist` | `remote_lists` | `[]` | URLs pulled by the updater |
 | | `local_lists` | `[]` | Files loaded from disk at startup |
@@ -229,6 +245,24 @@ Full reference:
 | | `schedule` | `0 0 0 * * *` | Cron expression (6-field: sec min hour dom month dow) |
 | | `timezone` | `EST` | Timezone the cron runs in |
 | | `update_on_start` | `true` | Refresh remote lists once at startup (background, non-fatal) |
+
+#### DNS over HTTPS upstreams
+
+Upstream entries can be DoH URLs instead of plain `ip:port`, so forwarded
+queries leave the box encrypted (clients still talk plain DNS to the
+blackhole). The format is `https://<host>[:port][/dns-query][@bootstrap_ip[:port]]`:
+
+```toml
+upstream_dns = [
+    "https://dns.quad9.net/dns-query@9.9.9.9:443",  # hostname + bootstrap IP
+    "https://1.1.1.1/dns-query",                    # IP-literal host, no bootstrap
+]
+```
+
+A hostname needs the `@bootstrap` suffix because there's no working resolver
+yet to look it up at startup; the hostname is still used for TLS certificate
+verification. The endpoint path must be `/dns-query` (the port defaults
+to 443).
 
 ### Blocklists
 
@@ -255,7 +289,7 @@ A custom list looks like this:
 ads.example.com
 tracker.example.com
 
-*.doubleclick.net
+*.malware.xyz
 *.googlesyndication.com
 ```
 
@@ -300,6 +334,7 @@ skypier-blackhole update             # pull remote lists now
 skypier-blackhole test <domain>      # would this domain be blocked?
 skypier-blackhole add <domain>       # append to the custom list, reload
 skypier-blackhole remove <domain>    # drop from the custom list, reload
+skypier-blackhole tui                # run the server with a live dashboard
 ```
 
 `add` and `remove` edit the custom list and, if the server is up, reload it on
@@ -334,6 +369,25 @@ Skypier Blackhole Status
 
 ==================================================
 ```
+
+### Interactive dashboard (TUI)
+
+`skypier-blackhole tui` runs the DNS server with a full-screen terminal
+dashboard instead of plain log output. It shows a live activity log (blocked
+queries highlighted), the configured upstream resolvers, in-memory session
+stats (query counts, block rate, top blocked domains since startup; nothing is
+persisted), and a blocklist summary with per-source counts and the last/next
+remote update.
+
+Key bindings:
+
+| Key | Action |
+|-----|--------|
+| `a` | add a domain to the custom list (live) |
+| `d` | remove a domain from the custom list (live) |
+| `u` | download remote blocklists now |
+| `r` | reload all lists from disk |
+| `q` / `Esc` / `Ctrl+C` | quit |
 
 ### Running under systemd
 
@@ -434,8 +488,9 @@ skypier-blackhole update
 
 **How is this different from Pi-hole?** Same idea, much smaller surface. It's a
 single Rust binary with no PHP, no web UI, and no external cron, and it runs on
-macOS and Windows as well as Linux. The tradeoff is that you configure it
-through a TOML file and the CLI rather than a dashboard.
+Linux and macOS today (Windows support is in progress and will be released
+soon). The tradeoff is that you configure it through a TOML file and the CLI
+rather than a dashboard.
 
 **Can I use it as a Pi-hole replacement at home?** Yes. Set
 `listen_addr = "0.0.0.0"` and point your devices (or your router's DHCP DNS
@@ -446,8 +501,8 @@ setting) at the host.
 **Can I whitelist domains?** Not yet, that's planned. For now, remove a domain
 from your lists rather than overriding it.
 
-**Multiple upstreams?** Yes, list them in `upstream_dns`. The first one that
-answers is used.
+**Multiple upstreams?** Yes, list them in `upstream_dns`. A random one is
+picked for each query, so no single resolver sees every lookup.
 
 **What list formats work?** One domain per line with `#` comments, including
 StevenBlack hosts files. Wildcards use the `*.domain.com` syntax.
