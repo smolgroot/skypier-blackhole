@@ -50,3 +50,33 @@ jobs:
           archive: $bin-$target
           checksum: sha256
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  build-deb:
+    needs: create-release
+    name: deb (amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deb
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb
+
+      - name: Build .deb package
+        run: cargo deb --output target/debian/skypier-blackhole_amd64.deb
+
+      - name: Generate checksum
+        working-directory: target/debian
+        run: sha256sum skypier-blackhole_amd64.deb > skypier-blackhole_amd64.deb.sha256
+
+      - name: Upload .deb to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            target/debian/skypier-blackhole_amd64.deb \
+            target/debian/skypier-blackhole_amd64.deb.sha256

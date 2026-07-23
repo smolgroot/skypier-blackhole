@@ -407,7 +407,7 @@ strip = true           # Strip debug symbols
 [Unit]
 Description=Skypier Blackhole DNS Resolver
 After=network.target
-Documentation=https://github.com/skypier/skypier-blackhole
+Documentation=https://github.com/SkyPierIO/skypier-blackhole
 
 [Service]
 Type=simple

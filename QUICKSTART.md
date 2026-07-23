@@ -14,7 +14,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/skypier/skypier-blackhole.git
+git clone https://github.com/SkyPierIO/skypier-blackhole.git
 cd skypier-blackhole
 
 # Build the binary
